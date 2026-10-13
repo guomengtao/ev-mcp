@@ -1,0 +1,14 @@
+# ev-mcp 独立仓忽略规则（2026-10-13，废话粉碎机🗯️）
+# 铁律：密钥类文件必须先于首次 git add 被忽略
+
+# 密钥与本地环境（.env 含 Supabase service_role key）
+.env
+.env*
+
+# 依赖与构建产物
+node_modules/
+*.vsix
+out/
+
+# 运行时状态（会话/任务本地账本）
+.ev/

@@ -1,0 +1,14 @@
+{
+  "name": "ev-mcp",
+  "version": "0.2.0",
+  "description": "ev-mcp — AI Task & Chat Tracker, Supabase 持久化，零依赖",
+  "main": "index.js",
+  "icon": "icon.svg",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

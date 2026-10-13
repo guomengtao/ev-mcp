@@ -1,0 +1,1 @@
+{"type":"develop","title":"ev-mcp 新任务单号格式: evm-{tool}-{project}-{YYMMDD}-{HHMM}-{random4}","assignee":"codebuddy","project":"guomengtao","priority":"P2","session":"trae-20261012-1909-e5b5","description":"将 EV-0001 自增格式替换为 evm-trae-ev-mcp-261012-2130-a7f3 新格式。tool 取自 clientName, project 支持 EV_PROJECT 指定具体子项目名, 日期含时分, 4位hex随机码防撞。改1个文件, 需认领。"}

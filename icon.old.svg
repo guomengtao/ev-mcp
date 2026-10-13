@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00d2ff"/>
+      <stop offset="100%" stop-color="#7b2ff7"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#7b2ff7" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="url(#glow)" opacity="0.5"/>
+  <text x="64" y="58" font-family="Menlo, Monaco, monospace" font-size="40" font-weight="bold" fill="url(#accent)" text-anchor="middle">ev</text>
+  <text x="64" y="90" font-family="Menlo, Monaco, monospace" font-size="15" font-weight="bold" fill="#5a7fa0" text-anchor="middle">MCP</text>
+  <circle cx="92" cy="34" r="6" fill="#00ff88"/>
+</svg>
