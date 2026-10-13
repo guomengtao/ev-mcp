@@ -303,6 +303,8 @@ async function dbTool(name, args) {
     return `收割 ${done.length} 条：\n${lines}`;
   }
   if (name === "ev_log_message") {
+    if (!args.role || !args.role.trim()) return "❌ role 字段必填，不能为空";
+    if (!args.content || !args.content.trim()) return "❌ content 字段必填，不能为空";
     const tasks = await dbLoadTasks();
     const inProgress = tasks.filter((t) => t.status === "doing");
     if (inProgress.length > 0) {
@@ -314,7 +316,7 @@ async function dbTool(name, args) {
         return `❌ task_id ${args.task_id} 不是进行中任务（当前进行中：${inProgress.map((t) => t.id).join(", ")}），请检查`;
       }
     }
-    await dbLogMessage(args.role, args.content, args.session_id || sessionId, args.task_id, args.tool_name, args.duration_ms);
+    await dbLogMessage(args.role, args.content, args.session_id || sessionId, args.task_id, args.tool_name, args.duration_ms, null, "ok", clientName);
     return `已记录 [${args.role}]: ${args.content.slice(0, 80)}${args.content.length > 80 ? "..." : ""}`;
   }
   if (name === "ev_name_session") {

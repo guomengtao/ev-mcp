@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "evops": {
+      "command": "node",
+      "args": ["/Users/Banner/Documents/guomengtao/ev/ev-mcp/index.js"]
+    }
+  }
+}
