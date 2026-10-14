@@ -12,3 +12,18 @@ out/
 
 # 运行时状态（会话/任务本地账本）
 .ev/
+
+# --- 防长草补齐（总纲§3.19 标准模板，2026-10-14）---
+.DS_Store
+*.tmp
+*.bak
+.bak-*
+tmp_*
+__pycache__/
+*.py[cod]
+*.log
+dist/
+.cache/
+*.local
+config.local.json
+.env.local
