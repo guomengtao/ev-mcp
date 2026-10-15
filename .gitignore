@@ -27,3 +27,15 @@ dist/
 *.local
 config.local.json
 .env.local
+
+# --- WIP 噪音抑制（2026-10-15 陈账催收员🧾 批量补入）---
+*.pyc
+*.pyo
+*_out.txt
+_probe*.js
+_tmp_*
+_kc_*
+_persist_*
+_dbe_backup/
+trae_verify*
+.trae/
