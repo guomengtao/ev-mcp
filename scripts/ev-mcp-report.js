@@ -32,14 +32,26 @@ const PROJECT = (process.env.EV_PROJECT || 'banner').toLowerCase();
 const TOOL_NAME = 'ev-mcp-report';
 const CONTENT_LIMIT = 2000;
 
+/**
+ * 脱敏：curl 失败时 child_process 会把整条命令行塞进 e.message，
+ * 而命令行里带 apikey/Bearer —— 不脱敏就会把 service_role key 打进 stderr 日志。
+ */
+function redact(msg) {
+  let s = String(msg == null ? '' : msg);
+  try {
+    if (ROOT_CRED && ROOT_CRED.key) s = s.split(ROOT_CRED.key).join('***REDACTED***');
+  } catch (e) { /* ignore */ }
+  return s.replace(/(apikey|Authorization)[^ ]*/gi, '$1 ***REDACTED***');
+}
+
 /** fail-open：只告警、不抛错、exit 0，保证调用方（钩子）永不因此阻塞 */
 function failOpen(msg) {
-  console.error('[ev-mcp-report] ' + msg);
+  console.error('[ev-mcp-report] ' + redact(msg));
   process.exit(0);
 }
 
 function curlJson(method, urlPath, headers, body) {
-  const args = ['-sS', '-m', '5', '-X', method, ROOT_CRED.url + urlPath];
+  const args = ['-sS', '-m', '8', '-X', method, ROOT_CRED.url + urlPath];
   for (const k of Object.keys(headers)) args.push('-H', k + ': ' + headers[k]);
   if (body !== undefined) {
     args.push('-H', 'Prefer: return=minimal');
@@ -105,7 +117,7 @@ try {
   };
 
   const res = execFileSync('curl', [
-    '-sS', '-m', '5', '-o', '/dev/null', '-w', '%{http_code}',
+    '-sS', '-m', '8', '-o', '/dev/null', '-w', '%{http_code}',
     '-X', 'POST', ROOT_CRED.url + '/rest/v1/ev_mcp_logs',
     '-H', 'apikey: ' + ROOT_CRED.key,
     '-H', 'Authorization: Bearer ' + ROOT_CRED.key,
@@ -120,5 +132,5 @@ try {
   console.log('[ev-mcp-report] ✅ 已入库 request_id=' + requestId +
     ' task=' + (taskId || '-') + ' len=' + content.length + ' project=' + PROJECT);
 } catch (e) {
-  failOpen('异常：' + (e && e.message ? e.message : String(e)));
+  failOpen('异常：' + (e && e.message ? e.message : String(e)));   // 内部已脱敏，不会泄露 key
 }
