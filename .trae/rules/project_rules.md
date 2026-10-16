@@ -8,3 +8,25 @@
 
 - **gitignore 必须带全总纲 §3.19 标准模板模式**（2026-10-14 评分实锤：DS_Store/log/tmp 三样全缺，接近白纸）——本次已补齐，此后新增垃圾类型先补模板再同步本仓
 - 调试/临时输出一律 `/tmp`，禁止落仓库根
+
+## Supabase 数据库命令行操作 · 2026-10-16
+
+> `.env` 中已含完整凭据，AI/Agent 直接用 psql 操作数据库，不再询问用户。
+
+| 凭据 | 用途 |
+|---|---|
+| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | REST API DML（增删改查，走 PostgREST） |
+| `SUPABASE_POSTGRES_URL` | psql 直连 DDL（ALTER / CREATE INDEX 等，走 pooler） |
+| `SUPABASE_POSTGRES_PASSWORD` | psql 连接备用密码 |
+
+**DDL 操作方式（psql 已有）：**
+```bash
+# 方式一：用 URL 直接连接（推荐）
+/opt/homebrew/bin/psql "$SUPABASE_POSTGRES_URL" -c "SQL语句"
+
+# 方式二：用密码变量
+PGPASSWORD="$SUPABASE_POSTGRES_PASSWORD" /opt/homebrew/bin/psql -h aws-0-us-east-1.pooler.supabase.com -p 6543 -U postgres.kqzkdpmyivtpxkfmibnd -d postgres -c "SQL语句"
+```
+
+**已执行过的迁移：**
+- `ALTER TABLE ev_mcp_logs ADD COLUMN IF NOT EXISTS data_sid TEXT;` — 2026-10-16 已落库

@@ -1,3 +1,0 @@
-const u='https://kqzkdpmyivtpxkfmibnd.supabase.co/rest/v1/ev_mcp_logs?select=id,role,content,created_at&order=created_at.desc&limit=5';
-const k='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxemtkcG15aXZ0cHhrZm1pYm5kIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODc1MjQyOCwiZXhwIjoyMTA0MzI4NDI4fQ.klkabFa-a5fhCVw5sbdN9kPo4iPQ3AsHjRC8NA5QASI';
-fetch(u,{headers:{apikey:k,Authorization:'Bearer '+k}}).then(r=>r.json()).then(d=>{for(const x of d)console.log(x.id, x.role, '|'+(x.content||'').slice(0,40));}).catch(e=>console.error(e.message));
