@@ -67,13 +67,30 @@ async function sb(method, path, body) {
   return JSON.parse(txt);
 }
 
-// ---- 会话追踪（PID+时间戳唯一ID + Supabase持久化，花名由AI起）----
+// ---- 会话追踪（稳定唯一ID：本地落盘 + Supabase持久化）----
+// 会话 id 必须稳定：进程/电脑重启后仍沿用同一个 id，借此找回历史会话、花名与归属。
+// 首次生成后写入本地 .session 文件复用，重启不重建。
 const PID = process.pid;
+const SESSION_FILE = process.env.EV_SESSION_FILE || path.join(__dirname, ".session");
+
+function loadPersistedSession() {
+  if (process.env.EV_SESSION_SID) return process.env.EV_SESSION_SID.trim();
+  try {
+    const v = fs.readFileSync(SESSION_FILE, "utf8").trim();
+    if (/^S[A-Z0-9]+-[A-Z0-9]+$/.test(v)) return v;
+  } catch {}
+  return "";
+}
+function savePersistedSession(id) {
+  try { fs.writeFileSync(SESSION_FILE, id, "utf8"); } catch {}
+}
+
 const PID36 = PID.toString(36).toUpperCase();
 const TS36 = (Date.now() % 0xFFFF).toString(36).toUpperCase();
 const RND = Math.random().toString(36).slice(2, 5).toUpperCase();
-const sessionId = "S" + PID36 + "-" + TS36 + RND;   // 如 S2AB-3FQ7X
-let sessionName = null;     // 花名，由 AI 通过 ev_name_session 起
+const sessionId = loadPersistedSession() || ("S" + PID36 + "-" + TS36 + RND);   // 如 S2AB-3FQ7X
+savePersistedSession(sessionId);   // 落盘，重启后复用同一 id
+let sessionName = null;     // 花名（昵称，可随时改，仅展示；识别靠 id 不靠名字）
 let roundCount = 0;
 
 // Supabase 会话操作（纯线上）
@@ -94,15 +111,24 @@ async function dbCheckNameUnique(project, name) {
   return !rows || rows.length === 0;
 }
 
-// 启动时创建会话记录（纯 Supabase 线上）
+// 启动时恢复或创建会话记录（纯 Supabase 线上）
+// 识别靠稳定 sessionId：已存在则复用（并恢复花名记录），否则新建。
 (function initSession() {
   console.error("[ev-mcp] 会话=" + sessionId + " PID=" + PID);
 
   if (SB_URL && SB_KEY) {
-    dbCreateSession(sessionId, PROJECT, null).then(() => {
-      console.error("[ev-mcp] 会话已写入 Supabase ev_mcp_sessions");
+    sb("GET", "ev_mcp_sessions?id=eq." + encodeURIComponent(sessionId)).then((rows) => {
+      if (rows && rows.length) {
+        const old = rows[0];
+        sessionName = old.name || null;      // 恢复旧花名（纯昵称展示）
+        console.error("[ev-mcp] 会话已存在，恢复花名=" + (sessionName || "(无)"));
+        return dbRenameSession(sessionId, PROJECT, old.name || null);
+      }
+      return dbCreateSession(sessionId, PROJECT, null).then(() => {
+        console.error("[ev-mcp] 新会话已写入 Supabase ev_mcp_sessions");
+      });
     }).catch((e) => {
-      console.error("[ev-mcp] 会话 Supabase 写入失败:", e.message);
+      console.error("[ev-mcp] 会话 Supabase 同步失败:", e.message);
     });
   } else {
     console.error("[ev-mcp] ⚠ SUPABASE_URL/KEY 未配置，服务不可用");
@@ -321,11 +347,9 @@ async function dbTool(name, args) {
   }
   if (name === "ev_name_session") {
     const newName = args.name.trim();
-    // 先查 Supabase 是否重复
-    let ok = true;
-    try { ok = await dbCheckNameUnique(PROJECT, newName); } catch {}
-    if (!ok) return `❌ 花名 "${newName}" 已被本项目的其他会话使用，请换一个。`;
-    try { await dbRenameSession(sessionId, PROJECT, newName); } catch {}
+    if (!newName) return "❌ 花名不能为空";
+    // 花名是昵称，可随时改。识别靠 id 不靠名字：改名只更新本会话记录，不因他人占用而拒绝。
+    try { await dbRenameSession(sessionId, PROJECT, newName); } catch (e) { return "❌ 改名失败: " + e.message; }
     sessionName = newName;
     return `🌸 会话花名已定为：${newName}`;
   }
