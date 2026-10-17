@@ -39,6 +39,34 @@
 
 **Why**: Claude/CodeBuddy sessions are enforced by a PreToolUse hook (`~/.claude/hooks/ev-claim-guard.sh`). Trae has NO hook enforcement — these rules are the ONLY thing standing between you and polluting a shared multi-AI workspace. Violations are harvested daily by MorningCut (晨割 v3): any claim idle > 6h is closed as "no owner", and your uncommitted WIP gets flagged in PROJECT-MAP.md.
 
+## Hard Gate 1 — Edit files in the editor, NEVER via shell (2026-10-18, MANDATORY)
+
+> **✍️ 文件的新建与修改，一律走编辑器的文件编辑能力**（`Write` / `Edit` / `MultiEdit` / 应用 diff 补丁）；**终端只用于执行不改工作区内容的命令**（`git status`、`git log`、测试、构建、lint、查询）。
+
+**禁止在终端里用下列方式创建或修改文件内容**（命中即被 `ev-agent-guard` 拦截）：
+
+| 形式 | 示例 |
+|---|---|
+| 输出重定向 | `cat > a.ts`、`echo x >> README.md`、`printf ... > out.txt`、`: > app.log` |
+| here-document | `cat << EOF > a.txt`、`git commit -F - <<EOF` |
+| tee 落盘 | `npm run build \| tee build.log` |
+| 原地编辑 | `sed -i 's/a/b/' f`、`perl -i -pe ...` |
+| 解释器内联写 | `python3 -c "open('a','w').write(...)"`、`node -e "writeFileSync(...)"` |
+| 显式写盘 | `truncate`、`install`、`patch` |
+
+**放行**：只读命令、版本控制命令（`git add/commit/push` 等）、测试与构建命令，以及**写入临时区**（`/tmp`、`$TMPDIR`、`/var/folders/**/T`）的日志。
+
+**为什么这样要求（有实证）**：
+
+1. **回显洪水**：经终端写文件，整份内容会原样进入 pty。写 200 行代码就等于向 xterm.js 灌 200 行 —— 这是"终端崩溃"最直接的成因。
+2. **命令挂死**：heredoc 遇到中文、缩进或特殊字符（`` $ \ ` ! ``）转义失败后，会一直等待结束标记，命令**永不退出**。插件据此判定 `busy` 卡死，于是不断新开终端 → 孤儿进程堆积。
+   - **本机实证**：`~/Library/Application Support/Code/logs/*/ptyhost.log` 中 **12 个 Persistent process 全部 orphan → reconnection → Replaying**（最大 8372 chars）。
+3. **不可回滚**：shell 写坏的文件既无 diff 也无法撤销；编辑器编辑有 diff 预览与 Ctrl+Z。
+
+**这并非限制，而是分工**：编辑器负责"改内容"，终端负责"跑命令"。插件本身已具备两条通道（`run_command` 与 `writeFile` / `applyEdit` / `WorkspaceEdit`），本规则只是把"改内容"固定走后者。
+
+> **终端侧兜底**：自动化终端已挂 `ev-agent-guard`（`~/.workbuddy/scripts/ev-agent-guard.sh`，经 `automationProfile.osx` 的 `ZDOTDIR` 加载）。命中写文件命令时会打印上面这张表并阻止执行 —— **该提示会被插件回读**，从而自动切换到编辑器通道。用户手动打开的终端不受影响。
+
 ## File-count ladder (mirrors WorkBuddy's claim_guard.py — 2026-10-08)
 
 The WorkBuddy/Claude gate enforces this mechanically; Trae must self-enforce:
