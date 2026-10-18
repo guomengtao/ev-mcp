@@ -6,9 +6,11 @@
 
 > **🔒 多文件必领单（2026-10-09 用户增订）**：**凡本次改动涉及 >1 个文件，必须先申请到任务单**；**没有任务单，一律禁止修改任何代码**。单文件 ≤5 行的免除仍适用，但一旦跨 >1 个文件，无论改动多小都得先领单。
 
-> **🔄 ev-mcp 独立系统（2026-10-13）**：Trae 优先使用自己的 ev-mcp MCP 任务系统（`evm-trae-*` 单号），不再依赖老 `evtask-*` 云端。老系统供 Claude/CodeBuddy 继续使用。两套并存、互不干扰。
+> **🔄 ev-mcp 独立系统（2026-10-13 制定 · 2026-10-18 定为铁律）**：Trae **必须先走且只走**自己的 ev-mcp MCP 任务系统（`evm-trae-*` 单号），**一律禁止**再使用 workbuddy 的老 `evtask-*` 云端（`task-register`/`task-close`/`ev-claim.sh`/`ev-session-name.sh`）。老 `evtask-*` 体系仅供 Claude/CodeBuddy 使用。两套并存、互不干扰，**Trae 绝不跨系统混用**。
+>
+> **🚫 Trae 禁用清单（2026-10-18 用户指定，违反即违规）**：Trae 会话内**不得**调用 workbuddy 的 `task-register`/`task-close`/`task-notify`/`task-ping`、`ev-claim.sh`、`ev-session-name.sh`，**不得**领取/关闭 `evtask-*` 单号，**不得**关闭他仓/他人 `evtask-*` 任务（含"晨割/收割孤儿任务"）。Trae 一切任务生命周期（领单、收尾、收割）只经 ev-mcp 的 `ev_add_task` / `ev_start` / `ev_done` / `ev_harvest`。
 
-**Trae — 领单（ev-mcp MCP，推荐）：**
+**Trae — 领单（ev-mcp MCP，唯一通道）：**
 
 ```bash
 # 方式一：通过 MCP 工具调用（AI 在会话内调用，无需命令行）
