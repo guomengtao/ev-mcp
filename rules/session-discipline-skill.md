@@ -1,6 +1,6 @@
 ---
 name: "session-discipline"
-description: "Enforces session-begin checklist + delivery-before testing gate per the dev master plan (多人多AI统一协调开发总纲 §3.9/§3.15). Invoke at the START of every session before doing any task, and RE-INVOKE before delivering any completed work to the user."
+description: "Fast-boot session init + delivery-before testing gate per the dev master plan (多人多AI统一协调开发总纲 §3.9/§3.15). Invoke at the START of every session before doing any task, and RE-INVOKE before delivering any completed work to the user. Session init runs in background, never blocks user interaction."
 ---
 
 # Session Discipline (会话前检查 + 交付前测试门禁)
@@ -167,102 +167,62 @@ Shared scripts (single source of truth for all three tools):
 | edit stats | `tools/hooks/edit_stats.py` | PostToolUse |
 | ev-report | `ev/ev-ops-android/scripts/ev-report.js` | SessionStart / UserPromptSubmit / SessionEnd |
 
-### Step 3.1 — 会话欢迎流程（4 步，每场新会话执行一次，Gate 1 之后执行）
+### Step 3.1 — 会话快速启动（Fast Boot）— REWRITTEN 2026-10-22
 
-**每场 Trae 新会话必须先完成 4 步欢迎流程，之后才能接任何用户任务。** 流程依次建立开发者身份、登记会话、报告今日统计、声明就绪。按顺序执行，不可跳步、不可乱序。
-
----
-
-#### Step 3.1.1 — 花名（昵称）设置
-
-AI 自行生成一个俏皮好记的花名，**必须包含至少 1 个 emoji 图标 + 2~8 字中文，emoji 位置不限**。示例：`🐶小铁锤`、`小铁锤🐶`、`🪑螺丝钉`、`☀️代码蚂蚁`、`闪电猫⚡`、`飞舞的蒲公英🌸`。整场会话不更改。花名即为所有钩子 payload 中的 `title` 字段。
-
-**emoji 校验规则**：花名必须包含至少一个 emoji 字符（Unicode Emoji_Presentation 或 Extended_Pictographic）且中文 2~8 字。不含 emoji 或中文字数不合规的花名视为不合法，`ev-report.js` 将拒绝写入黑板和 Supabase 入库。
-
-```
-🔨 我是【🐶小铁锤】，本场会话由我为你干活。
-```
+**核心理念：先回用户，后台初始化。用户第一句话必须秒回，所有会话登记走后台异步，绝不阻塞用户交互。**
 
 ---
 
-#### Step 3.1.2 — 登记会话记录
+#### Step 3.1.1 — 后台初始化（fire-and-forget，不阻塞回复）
 
-调用 `ev-report.js start` 初始化会话黑板并在 Supabase 立案，EvOps App 端可见（tool=trae, title=花名）。
+收到用户首条消息后，**并行做三件事**，缺一不可：
+
+**(A) 立刻回答用户** —— 不等待任何初始化完成。如果首条消息是打招呼，直接回复问候；如果是任务，直接开始分析。
+
+**(B) Gate 1 轻量检查（必须，< 50ms）** —— 和回复用户**同时**进行，不等待结果：
+
+```bash
+stat -f "%Sm" -t "%Y-%m-%d %H:%M" ~/Documents/guomengtao/多人多AI统一协调开发总纲.md
+```
+
+mtime 记下来，在第二轮回复时按需重读变更章节。此命令极轻量（纯本地 stat），不构成阻塞。
+
+**(C) 后台登记会话（必须）** —— 以 `blocking=false` + `wait_ms_before_async=0` 运行 `ev-report.js start`：
 
 ```bash
 echo '{"session_id":"<trae-sid>","cwd":"/Users/Banner/Documents/guomengtao","hook_event_name":"SessionStart","model":"deepseek-v4-pro","client":"trae-ide","version":"1.0"}' \
   | EV_TOOL=trae /usr/bin/env node ev/ev-ops-android/scripts/ev-report.js start
 ```
 
-产出：创建 `data/active/<sid>.json`（会话黑板）+ 注册 `_sidmap.json` 映射。
+- 花名（title）：后台自动生成，不在首轮回复中展示。默认使用简短标识如 `trae-<timestamp>`。
+- 会话登记成功/失败均不阻塞用户交互。失败在下一轮用 `CheckCommandStatus` 检查后静默告知。
+- SID 由 `ev-report.js` 自动生成，格式 `trae-YYYYMMDD-HHMM-<hash4>`，无需在首轮回复中展示。
+
+> **硬底限**：(A)(B)(C) 三者必须全部执行。(B)(C) 和 (A) 同时发起、不等待结果。只回复用户而不做 (B)(C) = 违规。等 (B)(C) 完成才回复 = 过度阻塞。
 
 ---
 
-#### Step 3.1.2a — 强制显示 SDR（会话纪律记录）⭐ 2026-10-12 新增 · 三通道 §3.7
+#### Step 3.1.2 — 首轮之后的收尾汇报（可选）
 
-**`ev-report.js start` 执行后，必须立即读取黑板 JSON 并将 SDR 以表格形式打给用户。漏打即违规。**
+后台初始化完成后，在**第二轮到第三轮之间**的某次回复末尾，可以简短附上报一次初始化确认（非强制）：
 
-1. 读取黑板 JSON：`ev/ev-ops-android/data/active/<sid>.json`
-2. 提取以下字段并以表格形式展示：
-
-| 字段 | 来源 | 说明 |
-|------|------|------|
-| 花名 | `.title` | 会话昵称 |
-| SID | `.sid` | ev-report 标准化后的会话 ID |
-| raw_sid | `.raw_sid` | AI 生成的原始 SID |
-| 黑板文件 | 文件路径 | `data/active/<sid>.json` |
-| 工具链 | `.tool` + model | 如 `trae-ide / deepseek-v4-pro` |
-| 启动时间 | `.started_at` | 会话立案时间 |
-| 任务 | `.tasks[]` | 已认领的任务单号列表（空 = 未领单） |
-
-**输出格式**（必须原样打出，不可省略）：
 ```
-📋 SDR（会话纪律记录）
-| 花名 | <title> |
-| SID  | <sid> |
-| 黑板 | data/active/<sid>.json |
-| 工具 | <tool> / <model> |
-| 启动 | <started_at> |
-| 任务 | <list or "无（未领单）"> |
+🟢 会话已登记 · sid=trae-YYYYMMDD-HHMM-xxxx
 ```
 
-> **此步骤为硬性要求，不可跳过**。如果黑板 JSON 不存在（`ev-report.js start` 失败），必须明确告知用户并标注 `⚠️ SDR 缺失`。
+不需要花名、不需要 SDR 表格、不需要统计报告。简洁为上。
+
+> Supabase 不可达时静默跳过，绝不阻塞会话。
 
 ---
 
-#### Step 3.1.3 — 今日统计报告
+#### Step 3.1.3 — 禁止事项
 
-从 Supabase 聚合查询今日累积数据并报告：
-
-| 统计项 | 含义 | 数据源 |
-|---|---|---|
-| 快速 | 无 evtask 单号的对话数 | 不关联 evtask 的 prompt |
-| 任务内 | 有 evtask 单号的对话数 | 关联 evtask 的 prompt |
-| 领单 | 今天注册的任务数 | `evops_tasks` |
-| 完成 | 今天完成（昨 N） | `evops_tasks` |
-| 进行 | 当前有单号的进行中任务（无单号 = 0）| `evops_tasks` |
-
-```
-💬 今日 10 轮 · 快速 3 / 任务内 7 ｜ 📥 领 6 · ✅ 完成 3（昨 5）· 🔵 进行 1（evtask-xxx 任务名）
-```
-> 进行 1 必须带真实完整的 evtask 单号（禁止截断 `…`，禁止自造）；没有领到单号或不确定完整单号则写 `🔵 进行 0`
->
-> **⚠️ 先查再报（2026-10-09）**：报「进行」前必须先核实真实数据，禁止凭空写 0。核实来源优先级：
-> 1. 读本会话黑板上报文件 `ev/ev-ops-android/data/active/<sid>.json`（`tasks[]` 里 `status=in_progress` 的 `id`）
-> 2. 云端接口 `?action=task-list&status=in_progress`（同源 `listInProgress()`）
-> 3. 两者都读不到才写 `🔵 进行 0`
-
-> Supabase 不可达时跳过此步并给出警告，绝不阻塞会话。
-
----
-
-#### Step 3.1.4 — 就绪声明
-
-明确声明已就绪。这是 AI 初始化完成、可以接任务的信号。
-
-```
-✅ 准备就绪。告诉我干什么，我开工。
-```
+- ❌ 不要在首轮回复中打印花名、SDR 表格、统计报告
+- ❌ 不要等 `ev-report.js start` 或 `stat` 返回结果才回复用户
+- ❌ 不要跳过 (B) Gate 1 检查或 (C) 后台登记——只回复用户是违规
+- ✅ 非阻塞 IO（stat、后台 RunCommand）必须做，和回复用户同时发起
+- ✅ 如果用户首条消息是纯打招呼（你好/hi/hello），一行回复即可，不需要额外的就绪声明
 
 ### Step 3.2 — PreToolUse claim guard (BEFORE every Write/Edit/MultiEdit)
 
@@ -286,26 +246,21 @@ echo '{"session_id":"<trae-sid>","tool_name":"Edit","tool_input":{"filePath":"<a
 
 Accumulates adds/dels per file into the session blackboard. The next `ev-report.js prompt` sync pushes these stats to the cloud, making progress visible on the task dashboard.
 
-### Step 3.4 — 每次收到用户消息：上报 + 汇报 + SDR（三通道强制 §3.7）
+### Step 3.4 — 每次收到用户消息：后台同步心跳（fire-and-forget）
 
-**每次收到用户消息，必须做三件事（缺一不可）：**
+**每次收到用户消息，只做一件事：后台同步心跳。**
 
-1. **调用 `ev-report.js prompt`** — 同步会话心跳 + 黑板数据到 Supabase。
-2. **向用户当面汇报** — 告知已同步、当前状态。
-3. **显示 SDR** — 将 `ev-report.js prompt` 吐出的 `📋 SDR` 表格（花名/SID/黑板/工具/启动/任务/上下文/体力/领取/健康）**原文附在本次答复末尾**。漏打即违规（三通道 §3.7）。
+调用 `ev-report.js prompt`（后台异步，不阻塞回复）：
 
-**汇报格式**（一行，用户可见）：
-```
-📨 已收到 · 会话【花名】· 任务 xxx · 第 N 轮
-```
-
-**SDR 显示要求**：每轮答复末尾必须包含 `ev-report.js` 钩子 stdout 输出的 `📋 SDR` 表格全部行。AI 不需要记忆 SDR 数据——钩子每轮自动吐到 stdout，只需**原文复述**。格式统一为表格（Step 3.1.2a = §3.7 通道1 = §3.7 通道2 输出）。
-
-**同步命令**（fire-and-forget，不阻塞回复）：
 ```bash
-echo '{"session_id":"<trae-sid>","prompt":"<user prompt, ≤80 chars>","cwd":"/Users/Banner/Documents/guomengtao","title":"<花名>","model":"deepseek-v4-pro","client":"trae-ide","version":"1.0"}' \
+echo '{"session_id":"<trae-sid>","prompt":"<user prompt, ≤80 chars>","cwd":"/Users/Banner/Documents/guomengtao","title":"trae-<timestamp>","model":"deepseek-v4-pro","client":"trae-ide","version":"1.0"}' \
   | EV_TOOL=trae /usr/bin/env node ev/ev-ops-android/scripts/ev-report.js prompt
 ```
+
+- fire-and-forget，不阻塞回复，不等返回结果
+- 不需要向用户汇报"已收到"或"SDR"
+- SDR 数据由 `ev-report.js` 自动写入黑板并同步到 Supabase，AI 不需要展示
+- 失败静默，绝不阻塞主流程
 
 ### Step 3.5 — SessionEnd (when session terminates)
 
@@ -320,60 +275,30 @@ Marks the session closed. Also triggers the Mac end-notify modal (`~/.workbuddy/
 
 The `<trae-sid>` is constructed as: `trae-YYYYMMDD-HHMM-<sha1-first-4>` using the same stable-sid algorithm as `ev-report.js`. On first use, read it from `_sidmap.json`; if not present, compute and use consistently for the whole session.
 
-### Step 3.7 — SDR 三通道强制互锁（2026-10-12 新增）
+### Step 3.7 — SDR 后台同步机制（简化为双通道）— REWRITTEN 2026-10-22
 
-SDR（会话纪律记录）通过三个独立通道相互强制、相互验证，任何一条通道缺失都会被另外两条检测到并告警。
-
----
-
-#### 通道1 — 插件层（SKILL.md，即本文档）
-
-**规则**：AI 每轮答复末尾**必须**附带完整 SDR（上下文%/对话/任务单/健康）。
-
-- 依据：Step 3.1.2a（会话启动时强制显示）+ Step 3.4（每轮强制显示）
-- 格式：由 `ev-report.js printSDR()` 输出 `📋 SDR` 表格（花名/SID/黑板/工具/启动/任务/上下文/体力/领取/健康），AI 原文复述
-- 违规判定：漏打 SDR → 会话纪律违规，可在 EvOps 看板标记
+SDR（会话纪律记录）数据由 `ev-report.js` 自动维护，不再要求 AI 在回复中展示。
 
 ---
 
-#### 通道2 — MCP 钩子层（ev-report.js）
+#### 通道1 — 钩子层（ev-report.js）
 
-**规则**：`ev-report.js prompt` 每轮调用 `printSDR()` 吐出 SDR 数据到 stdout，同时写黑板跟踪。
+**规则**：`ev-report.js prompt` 每轮自动调用 `printSDR()` 写入黑板跟踪。
 
-- 数据吐到 stdout：AI 可直接读取并复述（通道1 的数据源）
 - 黑板跟踪：每次 `printSDR()` 写 `_sdr_displayed_at`（时间戳）+ `_sdr_rounds`（累计轮次）到 `data/active/<sid>.json`
-- 黑板字段随 `session-sync` 同步到 Supabase（通道3）
+- 黑板字段随 `session-sync` 同步到 Supabase（通道2）
 - 代码位置：[ev-report.js](file:///Users/Banner/Documents/guomengtao/ev/ev-ops-android/scripts/ev-report.js) `printSDR()` → `bb._sdr_displayed_at` / `bb._sdr_rounds`
 
 ---
 
-#### 通道3 — Supabase 入库层
+#### 通道2 — Supabase 入库层
 
 **规则**：`session-sync` 将黑板中的 SDR 字段（`sdr_displayed_at` + `sdr_rounds`）写入 `evops_sessions` 表。
 
 - 字段来源：黑板 JSON → srow payload → `session-sync` API → Supabase upsert
-- 看板消费：EvOps 大屏可读取 `sdr_displayed_at` / `sdr_rounds` 展示 SDR 合规状态
-- 违规检测：`sdr_rounds === 0` 或 `sdr_displayed_at` 为空 → 标记「SDR 未显示」
+- 看板消费：EvOps 大屏可读取 `sdr_displayed_at` / `sdr_rounds` 展示会话活跃状态
 
----
-
-#### 三通道互锁机制
-
-```
-通道1 (SKILL.md)  ←→  AI 每轮显示 SDR  ←→  通道2 (ev-report.js) 吐出数据
-       ↑                                        ↓
-       |          通道3 (Supabase) 入库验证       |
-       └──────────  sdr_displayed_at ────────────┘
-                  sdr_rounds 计数
-```
-
-- **通道1 缺失** → 通道2 stdout 有 SDR 但 AI 未复述 → 通道3 `sdr_rounds` 仍计数（因为是钩子吐的），但看板标记 AI 未复述
-- **通道2 缺失** → 通道1 无数据源、通道3 无 `sdr_displayed_at` 更新 → 看板直接发现 SDR 断流
-- **通道3 缺失** → 通道2 黑板有数据但 Supabase 无记录 → 下一次会话重连时差异可见
-
----
-
-> **互锁原则**：三条通道缺一不可。每条通道既是数据生产者也是另外两条的校验者。任何单点故障都会被另外两条通道暴露。
+> **简化原则**：AI 不再需要在回复中展示 SDR。数据由钩子自动维护、Supabase 自动入库。两条通道足够覆盖所有监控需求。
 
 ### Fail-open discipline (same as Claude/CodeBuddy hooks)
 
